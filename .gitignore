@@ -1,2 +1,6 @@
 *.py[co]
 __pycache__/
+
+/.cache/
+/.tox/
+*.egg-info/
