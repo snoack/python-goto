@@ -91,7 +91,9 @@ injects a `JUMP_ABSOLUTE` instruction for each `goto`:
   3           6 BUILD_LIST               0
               9 STORE_FAST               3 (result)
 
-  5          12 JUMP_FORWARD             4 (to 19)
+  5          12 NOP
+             13 NOP
+             14 NOP
              15 NOP
              16 NOP
              17 NOP
@@ -126,7 +128,9 @@ injects a `JUMP_ABSOLUTE` instruction for each `goto`:
              69 NOP
              70 NOP
 
- 13          71 JUMP_FORWARD             4 (to 78)
+ 13          71 NOP
+             72 NOP
+             73 NOP
              74 NOP
              75 NOP
              76 NOP
