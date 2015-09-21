@@ -3,6 +3,8 @@
 A function decorator to use `goto` in Python.
 Tested on Python 2.5 through 3.5 and PyPy.
 
+![](https://imgs.xkcd.com/comics/goto.png)
+
 ## Usage
 
 ```python
