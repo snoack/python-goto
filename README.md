@@ -3,6 +3,8 @@
 A function decorator to use `goto` in Python.
 Tested on Python 2.6 through 3.5 and PyPy.
 
+[![Build Status](https://travis-ci.org/snoack/python-goto.svg?branch=master)](https://travis-ci.org/snoack/python-goto)
+
 ![](https://imgs.xkcd.com/comics/goto.png)
 
 ## Usage
