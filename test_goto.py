@@ -112,3 +112,13 @@ def test_jump_to_unkown_label():
 		goto .unknown
 
 	pytest.raises(SyntaxError, with_goto, func)
+
+def test_function_is_copy():
+	def func():
+		pass
+
+	func.foo = 'bar'
+	newfunc = with_goto(func)
+
+	assert newfunc is not func
+	assert newfunc.foo == 'bar'

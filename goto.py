@@ -2,14 +2,10 @@ import dis
 import struct
 import ctypes
 import types
+import functools
 
 _STRUCT_OP_WITH_ARG = struct.Struct('<BH')
 _STRUCT_ATTR_LOOKUP = struct.Struct('<BHBHB')
-
-if hasattr(lambda: 0, '__code__'):
-	_FUNC_CODE_ATTRIBUTE = '__code__'  # PY3
-else:
-	_FUNC_CODE_ATTRIBUTE = 'func_code' # PY2
 
 def _make_code(code, codestring):
 	args = [
@@ -113,6 +109,13 @@ def with_goto(func_or_code):
 	if isinstance(func_or_code, types.CodeType):
 		return _patch_code(func_or_code)
 
-	code = _patch_code(getattr(func_or_code, _FUNC_CODE_ATTRIBUTE))
-	setattr(func_or_code, _FUNC_CODE_ATTRIBUTE, code)
-	return func_or_code
+	return functools.update_wrapper(
+		types.FunctionType(
+			_patch_code(func_or_code.__code__),
+			func_or_code.__globals__,
+			func_or_code.__name__,
+			func_or_code.__defaults__,
+			func_or_code.__closure__,
+		),
+		func_or_code
+	)
