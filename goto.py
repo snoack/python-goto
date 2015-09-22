@@ -89,15 +89,16 @@ def _patch_code(code):
 		try:
 			label_pos, label_stack = labels[arg]
 		except KeyError:
-			continue
+			raise SyntaxError('Unknown label %r' % code.co_names[arg])
 
 		label_depth = len(label_stack)
 		if goto_stack[:label_depth] != label_stack:
-			continue
+			raise SyntaxError('Jumps into different blocks are not allowed')
 
 		depth_delta = len(goto_stack) - label_depth
-		if depth_delta > _STRUCT_ATTR_LOOKUP.size - _STRUCT_OP_WITH_ARG.size:
-			continue
+		max_depth_delta = _STRUCT_ATTR_LOOKUP.size - _STRUCT_OP_WITH_ARG.size
+		if depth_delta > max_depth_delta:
+			raise SyntaxError('Jumps out of more than %d nested blocks are not allowed' % max_depth_delta)
 
 		_inject_ops(buf, goto_pos, 'NOP', _STRUCT_ATTR_LOOKUP.size)
 		_inject_ops(buf, goto_pos, 'POP_BLOCK', depth_delta)

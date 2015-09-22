@@ -39,13 +39,12 @@ def test_jump_out_of_loop():
 	assert func() == 0
 
 def test_jump_into_loop():
-	@with_goto
 	def func():
 		for i in range(10):
 			label .loop
 		goto .loop
 
-	pytest.raises(NameError, func)
+	pytest.raises(SyntaxError, with_goto, func)
 
 def test_jump_out_of_nested_4_loops():
 	@with_goto
@@ -61,7 +60,6 @@ def test_jump_out_of_nested_4_loops():
 	assert func() == (0, 0, 0, 0)
 
 def test_jump_out_of_nested_5_loops():
-	@with_goto
 	def func():
 		for i in range(2):
 			for j in range(2):
@@ -72,10 +70,9 @@ def test_jump_out_of_nested_5_loops():
 		label .end
 		return (i, j, k, m, n)
 
-	pytest.raises(NameError, func)
+	pytest.raises(SyntaxError, with_goto, func)
 
 def test_jump_across_loops():
-	@with_goto
 	def func():
 		for i in range(10):
 			goto .other_loop
@@ -83,7 +80,7 @@ def test_jump_across_loops():
 		for i in range(10):
 			label .other_loop
 	
-	pytest.raises(NameError, func)
+	pytest.raises(SyntaxError, with_goto, func)
 
 def test_jump_out_of_try_block():
 	@with_goto
@@ -101,7 +98,6 @@ def test_jump_out_of_try_block():
 	assert func() == None
 
 def test_jump_into_try_block():
-	@with_goto
 	def func():
 		try:
 			label .block
@@ -109,4 +105,10 @@ def test_jump_into_try_block():
 			pass
 		goto .block
 
-	pytest.raises(NameError, func)
+	pytest.raises(SyntaxError, with_goto, func)
+
+def test_jump_to_unkown_label():
+	def func():
+		goto .unknown
+
+	pytest.raises(SyntaxError, with_goto, func)
