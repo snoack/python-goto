@@ -2,10 +2,9 @@ import dis
 import struct
 import ctypes
 import types
-import itertools
 
-_STRUCT = struct.Struct('<BHBHB')
-_NOP = struct.pack('B', dis.opmap['NOP'])
+_STRUCT_OP_WITH_ARG = struct.Struct('<BH')
+_STRUCT_ATTR_LOOKUP = struct.Struct('<BHBHB')
 
 if hasattr(lambda: 0, '__code__'):
 	_FUNC_CODE_ATTRIBUTE = '__code__'  # PY3
@@ -28,41 +27,84 @@ def _make_code(code, codestring):
 
 	return types.CodeType(*args)
 
-def _find_instructions(code, name):
-	for pos in itertools.count():
+def _is_single_attr_lookup(op1, op2, op3):
+	if dis.opname[op1] not in ('LOAD_GLOBAL', 'LOAD_NAME'):
+		return False
+	if dis.opname[op2] != 'LOAD_ATTR':
+		return False
+	if dis.opname[op3] != 'POP_TOP':
+		return False
+	return True
+
+def _find_labels_and_gotos(code):
+	block_stack = []
+	block_counter = 0
+
+	labels = {}
+	gotos = []
+
+	pos = 0
+	while True:
 		try:
-			op1, arg1, op2, arg2, op3 = _STRUCT.unpack_from(code.co_code, pos)
+			op1, arg1, op2, arg2, op3 = _STRUCT_ATTR_LOOKUP.unpack_from(code.co_code, pos)
 		except struct.error:
 			break
 
-		if dis.opname[op1] not in ('LOAD_GLOBAL', 'LOAD_NAME'):
-			continue
-		if code.co_names[arg1] != name:
-			continue
-		if dis.opname[op2] != 'LOAD_ATTR':
-			continue
-		if dis.opname[op3] != 'POP_TOP':
-			continue
+		if _is_single_attr_lookup(op1, op2, op3):
+			varname = code.co_names[arg1]
+			if varname == 'label':
+				labels[arg2] = (pos, tuple(block_stack))
+			elif varname == 'goto':
+				gotos.append((pos, arg2, tuple(block_stack)))
 
-		yield pos, arg2
+		opname = dis.opname[op1]
+		if opname.startswith('SETUP_'):
+			block_counter += 1
+			block_stack.append(block_counter)
+		elif opname == 'POP_BLOCK' and block_stack:
+			block_stack.pop()
 
-def _inject_nop_sled(buf, offset):
-	for i in range(_STRUCT.size):
-		buf[offset + i] = _NOP
+		if op1 < dis.HAVE_ARGUMENT:
+			pos += 1
+		else:
+			pos += _STRUCT_OP_WITH_ARG.size
+
+	return labels, gotos
+
+def _inject_ops(buf, offset, opname, count):
+	ctypes.memset(
+		(ctypes.c_char * count).from_address(
+			ctypes.addressof(buf) + offset
+		), dis.opmap[opname], count
+	)
 
 def _patch_code(code):
+	labels, gotos = _find_labels_and_gotos(code)
 	buf = ctypes.create_string_buffer(code.co_code, len(code.co_code))
-	labels = {}
 
-	for pos, arg in _find_instructions(code, 'label'):
-		_inject_nop_sled(buf, pos)
-		labels[arg] = pos + _STRUCT.size
+	for label_pos, _ in labels.values():
+		_inject_ops(buf, label_pos, 'NOP', _STRUCT_ATTR_LOOKUP.size)
 
-	for pos, arg in _find_instructions(code, 'goto'):
-		target = labels.get(arg)
-		if target is not None:
-			_inject_nop_sled(buf, pos)
-			struct.pack_into('<BH', buf, pos, dis.opmap['JUMP_ABSOLUTE'], target)
+	for goto_pos, arg, goto_stack in gotos:
+		try:
+			label_pos, label_stack = labels[arg]
+		except KeyError:
+			continue
+
+		label_depth = len(label_stack)
+		if goto_stack[:label_depth] != label_stack:
+			continue
+
+		depth_delta = len(goto_stack) - label_depth
+		if depth_delta > _STRUCT_ATTR_LOOKUP.size - _STRUCT_OP_WITH_ARG.size:
+			continue
+
+		_inject_ops(buf, goto_pos, 'NOP', _STRUCT_ATTR_LOOKUP.size)
+		_inject_ops(buf, goto_pos, 'POP_BLOCK', depth_delta)
+
+		jump_pos = goto_pos + depth_delta
+		target = label_pos + _STRUCT_ATTR_LOOKUP.size
+		_STRUCT_OP_WITH_ARG.pack_into(buf, jump_pos, dis.opmap['JUMP_ABSOLUTE'], target)
 
 	return _make_code(code, buf.raw)
 
