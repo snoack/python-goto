@@ -1,4 +1,4 @@
-from goto import with_goto
+from __past__ import with_goto
 
 CODE = '''\
 i = 0
