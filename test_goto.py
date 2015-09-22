@@ -18,12 +18,12 @@ label .end
 
 EXPECTED = list(range(10))
 
-def test_with_code():
+def test_range_as_code():
 	ns = {}
 	exec(with_goto(compile(CODE, '', 'exec')), ns)
 	assert ns['result'] == EXPECTED
 
-def test_as_decorator():
+def test_range_as_function():
 	ns = {}
 	exec('\n'.join(['def func():'] + ['\t' + x for x in CODE.splitlines() + ['return result']]), ns)
 	assert with_goto(ns['func'])() == EXPECTED
