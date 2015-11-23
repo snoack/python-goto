@@ -2,6 +2,6 @@ from setuptools import setup
 
 setup(
 	name='goto',
-	modules=['goto'],
+	py_modules=['goto'],
 	author='Sebastian Noack <sebastian.noack@gmail.com>'
 )
