@@ -12,8 +12,10 @@ python:
   - "pypy"
   - "pypy3"
 
+# virtualenv is a dependency of tox, by default it would install the
+# latest version, but virtualenv 14 and above is incompatible with Python 3.2.
 install:
-  - pip install tox
+  - pip install "virtualenv<14" tox
 
 script:
   - tox -e py
