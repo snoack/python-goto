@@ -1,3 +1,4 @@
+import sys
 import pytest
 from goto import with_goto
 
@@ -46,31 +47,55 @@ def test_jump_into_loop():
 
 	pytest.raises(SyntaxError, with_goto, func)
 
-def test_jump_out_of_nested_4_loops():
-	@with_goto
-	def func():
-		for i in range(2):
-			for j in range(2):
-				for k in range(2):
-					for m in range(2):
+if sys.version_info >= (3, 6):
+	def test_jump_out_of_nested_2_loops():
+		@with_goto
+		def func():
+			for i in range(2):
+				for j in range(2):
+					goto .end
+			label .end
+			return (i, j)
+
+		assert func() == (0, 0)
+
+	def test_jump_out_of_nested_3_loops():
+		def func():
+			for i in range(2):
+				for j in range(2):
+					for k in range(2):
 						goto .end
-		label .end
-		return (i, j, k, m)
+			label .end
+			return (i, j, k)
 
-	assert func() == (0, 0, 0, 0)
-
-def test_jump_out_of_nested_5_loops():
-	def func():
-		for i in range(2):
-			for j in range(2):
-				for k in range(2):
-					for m in range(2):
-						for n in range(2):
+		pytest.raises(SyntaxError, with_goto, func)
+else:
+	def test_jump_out_of_nested_4_loops():
+		@with_goto
+		def func():
+			for i in range(2):
+				for j in range(2):
+					for k in range(2):
+						for m in range(2):
 							goto .end
-		label .end
-		return (i, j, k, m, n)
+			label .end
+			return (i, j, k, m)
 
-	pytest.raises(SyntaxError, with_goto, func)
+		assert func() == (0, 0, 0, 0)
+
+	def test_jump_out_of_nested_5_loops():
+		def func():
+			for i in range(2):
+				for j in range(2):
+					for k in range(2):
+						for m in range(2):
+							for n in range(2):
+								goto .end
+			label .end
+			return (i, j, k, m, n)
+
+		pytest.raises(SyntaxError, with_goto, func)
+
 
 def test_jump_across_loops():
 	def func():

@@ -1,11 +1,20 @@
+import sys
 import dis
 import struct
 import ctypes
 import types
 import functools
 
-_STRUCT_OP_WITH_ARG = struct.Struct('<BH')
-_STRUCT_ATTR_LOOKUP = struct.Struct('<BHBHB')
+if sys.version_info >= (3, 6):
+	_OP = 'Bx'
+	_OPARG = 'BB'
+else:
+	_OP = 'B'
+	_OPARG = 'BH'
+
+_STRUCT_OP          = struct.Struct('<{0}'.format(_OP))
+_STRUCT_OPARG       = struct.Struct('<{0}'.format(_OPARG))
+_STRUCT_ATTR_LOOKUP = struct.Struct('<{0}{1}{2}'.format(_OPARG, _OPARG, _OP))
 
 def _make_code(code, codestring):
 	args = [
@@ -61,47 +70,48 @@ def _find_labels_and_gotos(code):
 			block_stack.pop()
 
 		if op1 < dis.HAVE_ARGUMENT:
-			pos += 1
+			pos += _STRUCT_OP.size
 		else:
-			pos += _STRUCT_OP_WITH_ARG.size
+			pos += _STRUCT_OPARG.size
 
 	return labels, gotos
 
-def _inject_ops(buf, offset, opname, count):
-	ctypes.memset(
-		(ctypes.c_char * count).from_address(
-			ctypes.addressof(buf) + offset
-		), dis.opmap[opname], count
-	)
+def _inject_ops(buf, offset, opcode, count):
+	for i in range(count):
+		_STRUCT_OP.pack_into(buf, offset, opcode)
+		offset += _STRUCT_OP.size
+	return offset
+
+def _inject_nop_sled(buf, offset, end):
+	_inject_ops(buf, offset, dis.opmap['NOP'], end // _STRUCT_OP.size)
 
 def _patch_code(code):
 	labels, gotos = _find_labels_and_gotos(code)
 	buf = ctypes.create_string_buffer(code.co_code, len(code.co_code))
 
 	for label_pos, _ in labels.values():
-		_inject_ops(buf, label_pos, 'NOP', _STRUCT_ATTR_LOOKUP.size)
+		_inject_nop_sled(buf, label_pos, _STRUCT_ATTR_LOOKUP.size)
 
 	for goto_pos, arg, goto_stack in gotos:
 		try:
 			label_pos, label_stack = labels[arg]
 		except KeyError:
-			raise SyntaxError('Unknown label %r' % code.co_names[arg])
+			raise SyntaxError('Unknown label {0!r}'.format(code.co_names[arg]))
 
 		label_depth = len(label_stack)
 		if goto_stack[:label_depth] != label_stack:
 			raise SyntaxError('Jumps into different blocks are not allowed')
 
 		depth_delta = len(goto_stack) - label_depth
-		max_depth_delta = _STRUCT_ATTR_LOOKUP.size - _STRUCT_OP_WITH_ARG.size
+		max_depth_delta = (_STRUCT_ATTR_LOOKUP.size - _STRUCT_OPARG.size) // _STRUCT_OP.size
 		if depth_delta > max_depth_delta:
-			raise SyntaxError('Jumps out of more than %d nested blocks are not allowed' % max_depth_delta)
+			raise SyntaxError('Jumps out of more than {0} nested blocks '
+			                  'are not allowed'.format(max_depth_delta))
 
-		_inject_ops(buf, goto_pos, 'NOP', _STRUCT_ATTR_LOOKUP.size)
-		_inject_ops(buf, goto_pos, 'POP_BLOCK', depth_delta)
-
-		jump_pos = goto_pos + depth_delta
+		_inject_nop_sled(buf, goto_pos, _STRUCT_ATTR_LOOKUP.size)
+		jump_pos = _inject_ops(buf, goto_pos, dis.opmap['POP_BLOCK'], depth_delta)
 		target = label_pos + _STRUCT_ATTR_LOOKUP.size
-		_STRUCT_OP_WITH_ARG.pack_into(buf, jump_pos, dis.opmap['JUMP_ABSOLUTE'], target)
+		_STRUCT_OPARG.pack_into(buf, jump_pos, dis.opmap['JUMP_ABSOLUTE'], target)
 
 	return _make_code(code, buf.raw)
 
