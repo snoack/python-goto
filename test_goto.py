@@ -24,10 +24,28 @@ def test_range_as_code():
 	exec(with_goto(compile(CODE, '', 'exec')), ns)
 	assert ns['result'] == EXPECTED
 
-def test_range_as_function():
+def make_function(code):
+	lines = ['def func():']
+	for line in code:
+		lines.append('\t' + line)
+	lines.append('\treturn result')
+
 	ns = {}
-	exec('\n'.join(['def func():'] + ['\t' + x for x in CODE.splitlines() + ['return result']]), ns)
-	assert with_goto(ns['func'])() == EXPECTED
+	exec('\n'.join(lines), ns)
+	return ns['func']
+
+def test_range_as_function():
+	assert with_goto(make_function(CODE.splitlines()))() == EXPECTED
+
+def test_EXTENDED_ARG():
+	code = []
+	for i in range(2**16):
+		code.append('label .l{0}'.format(i))
+	code.append('result = True')
+	code.append('goto .foo')
+	code.append('result = "dead code"')
+	code.append('label .foo')
+	assert with_goto(make_function(code))() is True
 
 def test_jump_out_of_loop():
 	@with_goto

@@ -1,20 +1,20 @@
 import sys
 import dis
 import struct
-import ctypes
+import array
 import types
 import functools
 
 if sys.version_info >= (3, 6):
-	_OP = 'Bx'
-	_OPARG = 'BB'
-else:
-	_OP = 'B'
-	_OPARG = 'BH'
+	_STRUCT_ARG = struct.Struct('B')
 
-_STRUCT_OP          = struct.Struct('<{0}'.format(_OP))
-_STRUCT_OPARG       = struct.Struct('<{0}'.format(_OPARG))
-_STRUCT_ATTR_LOOKUP = struct.Struct('<{0}{1}{2}'.format(_OPARG, _OPARG, _OP))
+	def _has_arg(opcode):
+		return True
+else:
+	_STRUCT_ARG = struct.Struct('<H')
+
+	def _has_arg(opcode):
+		return opcode >= dis.HAVE_ARGUMENT
 
 def _make_code(code, codestring):
 	args = [
@@ -32,88 +32,121 @@ def _make_code(code, codestring):
 
 	return types.CodeType(*args)
 
-def _is_single_attr_lookup(op1, op2, op3):
-	if dis.opname[op1] not in ('LOAD_GLOBAL', 'LOAD_NAME'):
-		return False
-	if dis.opname[op2] != 'LOAD_ATTR':
-		return False
-	if dis.opname[op3] != 'POP_TOP':
-		return False
-	return True
+def _parse_instructions(code):
+	extended_arg = 0
+	extended_arg_offset = None
+	pos = 0
+
+	while pos < len(code):
+		offset = pos
+		if extended_arg_offset is not None:
+			offset = extended_arg_offset
+
+		opcode = struct.unpack_from('B', code, pos)[0]
+		pos += 1
+
+		oparg = None
+		if _has_arg(opcode):
+			oparg = _STRUCT_ARG.unpack_from(code, pos)[0] | extended_arg
+			pos += _STRUCT_ARG.size
+
+			if opcode == dis.EXTENDED_ARG:
+				extended_arg = oparg << _STRUCT_ARG.size * 8
+				extended_arg_offset = offset
+				continue
+
+		extended_arg = 0
+		extended_arg_offset = None
+		yield (dis.opname[opcode], oparg, offset)
+
+def _write_instruction(buf, pos, opcode, oparg=0):
+	arg_bits = _STRUCT_ARG.size * 8
+	extended_arg = oparg >> arg_bits
+	if extended_arg != 0:
+		pos = _write_instruction(buf, pos, dis.EXTENDED_ARG, extended_arg)
+		oparg &= (1 << arg_bits) - 1
+
+	buf[pos] = opcode
+	pos += 1
+	if _has_arg(opcode):
+		_STRUCT_ARG.pack_into(buf, pos, oparg)
+		pos += _STRUCT_ARG.size
+
+	return pos
 
 def _find_labels_and_gotos(code):
-	block_stack = []
-	block_counter = 0
-
 	labels = {}
 	gotos = []
 
-	pos = 0
-	while True:
-		try:
-			op1, arg1, op2, arg2, op3 = _STRUCT_ATTR_LOOKUP.unpack_from(code.co_code, pos)
-		except struct.error:
-			break
+	block_stack = []
+	block_counter = 0
 
-		if _is_single_attr_lookup(op1, op2, op3):
-			varname = code.co_names[arg1]
-			if varname == 'label':
-				labels[arg2] = (pos, tuple(block_stack))
-			elif varname == 'goto':
-				gotos.append((pos, arg2, tuple(block_stack)))
+	opname1 = oparg1 = offset1 = None
+	opname2 = oparg2 = offset2 = None
+	opname3 = oparg3 = offset3 = None
 
-		opname = dis.opname[op1]
-		if opname.startswith('SETUP_'):
+	for opname4, oparg4, offset4 in _parse_instructions(code.co_code):
+		if opname1 in ('LOAD_GLOBAL', 'LOAD_NAME'):
+			if opname2 == 'LOAD_ATTR' and opname3 == 'POP_TOP':
+				name = code.co_names[oparg1]
+				if name == 'label':
+					labels[oparg2] = (offset1,
+					                  offset4,
+					                  tuple(block_stack))
+				elif name == 'goto':
+					gotos.append((offset1,
+					              offset4,
+					              oparg2,
+					              tuple(block_stack)))
+		elif opname1 in ('SETUP_LOOP',
+		                 'SETUP_EXCEPT', 'SETUP_FINALLY',
+		                 'SETUP_WITH', 'SETUP_ASYNC_WITH'):
 			block_counter += 1
 			block_stack.append(block_counter)
-		elif opname == 'POP_BLOCK' and block_stack:
+		elif opname1 == 'POP_BLOCK' and block_stack:
 			block_stack.pop()
 
-		if op1 < dis.HAVE_ARGUMENT:
-			pos += _STRUCT_OP.size
-		else:
-			pos += _STRUCT_OPARG.size
+		opname1, oparg1, offset1 = opname2, oparg2, offset2
+		opname2, oparg2, offset2 = opname3, oparg3, offset3
+		opname3, oparg3, offset3 = opname4, oparg4, offset4
 
 	return labels, gotos
 
-def _inject_ops(buf, offset, opcode, count):
-	for i in range(count):
-		_STRUCT_OP.pack_into(buf, offset, opcode)
-		offset += _STRUCT_OP.size
-	return offset
-
-def _inject_nop_sled(buf, offset, end):
-	_inject_ops(buf, offset, dis.opmap['NOP'], end // _STRUCT_OP.size)
+def _inject_nop_sled(buf, pos, end):
+	while pos < end:
+		pos = _write_instruction(buf, pos, dis.opmap['NOP'])
 
 def _patch_code(code):
 	labels, gotos = _find_labels_and_gotos(code)
-	buf = ctypes.create_string_buffer(code.co_code, len(code.co_code))
+	buf = array.array('B', code.co_code)
 
-	for label_pos, _ in labels.values():
-		_inject_nop_sled(buf, label_pos, _STRUCT_ATTR_LOOKUP.size)
+	for pos, end, _ in labels.values():
+		_inject_nop_sled(buf, pos, end)
 
-	for goto_pos, arg, goto_stack in gotos:
+	for pos, end, label, origin_stack in gotos:
 		try:
-			label_pos, label_stack = labels[arg]
+			_, target, target_stack = labels[label]
 		except KeyError:
-			raise SyntaxError('Unknown label {0!r}'.format(code.co_names[arg]))
+			raise SyntaxError('Unknown label {0!r}'.format(code.co_names[label]))
 
-		label_depth = len(label_stack)
-		if goto_stack[:label_depth] != label_stack:
-			raise SyntaxError('Jumps into different blocks are not allowed')
+		target_depth = len(target_stack)
+		if origin_stack[:target_depth] != target_stack:
+			raise SyntaxError('Jump into different block')
 
-		depth_delta = len(goto_stack) - label_depth
-		max_depth_delta = (_STRUCT_ATTR_LOOKUP.size - _STRUCT_OPARG.size) // _STRUCT_OP.size
-		if depth_delta > max_depth_delta:
-			raise SyntaxError('Jumps out of more than {0} nested blocks '
-			                  'are not allowed'.format(max_depth_delta))
+		failed = False
+		try:
+			for i in range(len(origin_stack) - target_depth):
+				pos = _write_instruction(buf, pos, dis.opmap['POP_BLOCK'])
+			pos = _write_instruction(buf, pos, dis.opmap['JUMP_ABSOLUTE'], target)
+		except (IndexError, struct.error):
+			failed = True
 
-		_inject_nop_sled(buf, goto_pos, _STRUCT_ATTR_LOOKUP.size)
-		jump_pos = _inject_ops(buf, goto_pos, dis.opmap['POP_BLOCK'], depth_delta)
-		target = label_pos + _STRUCT_ATTR_LOOKUP.size
-		_STRUCT_OPARG.pack_into(buf, jump_pos, dis.opmap['JUMP_ABSOLUTE'], target)
+		if failed or pos > end:
+			raise SyntaxError('Jump out of too many nested blocks')
 
-	return _make_code(code, buf.raw)
+		_inject_nop_sled(buf, pos, end)
+
+	return _make_code(code, buf.tostring())
 
 def with_goto(func_or_code):
 	if isinstance(func_or_code, types.CodeType):
