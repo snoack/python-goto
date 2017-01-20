@@ -159,7 +159,7 @@ def test_jump_into_try_block():
     pytest.raises(SyntaxError, with_goto, func)
 
 
-def test_jump_to_unkown_label():
+def test_jump_to_unknown_label():
     def func():
         goto .unknown
 
