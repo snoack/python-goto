@@ -14,19 +14,19 @@ from goto import with_goto
 
 @with_goto
 def range(start, stop):
-	i = start
-	result = []
+    i = start
+    result = []
 
-	label .begin
-	if i == stop:
-		goto .end
+    label .begin
+    if i == stop:
+        goto .end
 
-	result.append(i)
-	i += 1
-	goto .begin
+    result.append(i)
+    i += 1
+    goto .begin
 
-	label .end
-	return result
+    label .end
+    return result
 ```
 
 ## Implementation
