@@ -7,6 +7,12 @@ Tested on Python 2.6 through 3.6 and PyPy.
 
 [![](https://imgs.xkcd.com/comics/goto.png)](https://xkcd.com/292/)
 
+## Installation
+
+```
+pip install goto-statement
+```
+
 ## Usage
 
 ```python
