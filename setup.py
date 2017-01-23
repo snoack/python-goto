@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='goto-statement',
-    version='1.0',
+    version='1.1',
     url='https://github.com/snoack/python-goto/',
     description='A function decorator, that rewrites the bytecode, to enable goto in Python',
     py_modules=['goto'],
