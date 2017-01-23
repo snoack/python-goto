@@ -1,20 +1,39 @@
-import sys
 import dis
 import struct
 import array
 import types
 import functools
 
-if sys.version_info >= (3, 6):
-    _STRUCT_ARG = struct.Struct('B')
 
-    def _has_arg(opcode):
-        return True
-else:
-    _STRUCT_ARG = struct.Struct('<H')
+class _Bytecode:
+    def __init__(self):
+        code = (lambda: x if x else y).__code__.co_code
+        opcode, oparg = struct.unpack_from('BB', code, 2)
 
-    def _has_arg(opcode):
-        return opcode >= dis.HAVE_ARGUMENT
+        # Starting with Python 3.6, the bytecode format has been changed to use
+        # 16-bit words (8-bit opcode + 8-bit argument) for each instruction,
+        # as opposed to previously 24-bit (8-bit opcode + 16-bit argument) for
+        # instructions that expect an argument or just 8-bit for those that don't.
+        # https://bugs.python.org/issue26647
+        if dis.opname[opcode] == 'POP_JUMP_IF_FALSE':
+            self.argument = struct.Struct('B')
+            self.have_argument = 0
+            # As of Python 3.6, jump targets are still addressed by their byte
+            # unit. This, however, is matter to change, so that jump targets,
+            # in the future, will refer to the code unit (address in bytes / 2).
+            # https://bugs.python.org/issue26647
+            self.jump_unit = 8 // oparg
+        else:
+            self.argument = struct.Struct('<H')
+            self.have_argument = dis.HAVE_ARGUMENT
+            self.jump_unit = 1
+
+    @property
+    def argument_bits(self):
+        return self.argument.size * 8
+
+
+_BYTECODE = _Bytecode()
 
 
 def _make_code(code, codestring):
@@ -48,12 +67,12 @@ def _parse_instructions(code):
         pos += 1
 
         oparg = None
-        if _has_arg(opcode):
-            oparg = _STRUCT_ARG.unpack_from(code, pos)[0] | extended_arg
-            pos += _STRUCT_ARG.size
+        if opcode >= _BYTECODE.have_argument:
+            oparg = extended_arg | _BYTECODE.argument.unpack_from(code, pos)[0]
+            pos += _BYTECODE.argument.size
 
             if opcode == dis.EXTENDED_ARG:
-                extended_arg = oparg << _STRUCT_ARG.size * 8
+                extended_arg = oparg << _BYTECODE.argument_bits
                 extended_arg_offset = offset
                 continue
 
@@ -63,19 +82,18 @@ def _parse_instructions(code):
 
 
 def _write_instruction(buf, pos, opname, oparg=0):
-    arg_bits = _STRUCT_ARG.size * 8
-    extended_arg = oparg >> arg_bits
+    extended_arg = oparg >> _BYTECODE.argument_bits
     if extended_arg != 0:
         pos = _write_instruction(buf, pos, 'EXTENDED_ARG', extended_arg)
-        oparg &= (1 << arg_bits) - 1
+        oparg &= (1 << _BYTECODE.argument_bits) - 1
 
     opcode = dis.opmap[opname]
     buf[pos] = opcode
     pos += 1
 
-    if _has_arg(opcode):
-        _STRUCT_ARG.pack_into(buf, pos, oparg)
-        pos += _STRUCT_ARG.size
+    if opcode >= _BYTECODE.have_argument:
+        _BYTECODE.argument.pack_into(buf, pos, oparg)
+        pos += _BYTECODE.argument.size
 
     return pos
 
@@ -145,7 +163,7 @@ def _patch_code(code):
         try:
             for i in range(len(origin_stack) - target_depth):
                 pos = _write_instruction(buf, pos, 'POP_BLOCK')
-            pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target)
+            pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target // _BYTECODE.jump_unit)
         except (IndexError, struct.error):
             failed = True
 
