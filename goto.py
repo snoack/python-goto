@@ -62,15 +62,17 @@ def _parse_instructions(code):
         yield (dis.opname[opcode], oparg, offset)
 
 
-def _write_instruction(buf, pos, opcode, oparg=0):
+def _write_instruction(buf, pos, opname, oparg=0):
     arg_bits = _STRUCT_ARG.size * 8
     extended_arg = oparg >> arg_bits
     if extended_arg != 0:
-        pos = _write_instruction(buf, pos, dis.EXTENDED_ARG, extended_arg)
+        pos = _write_instruction(buf, pos, 'EXTENDED_ARG', extended_arg)
         oparg &= (1 << arg_bits) - 1
 
+    opcode = dis.opmap[opname]
     buf[pos] = opcode
     pos += 1
+
     if _has_arg(opcode):
         _STRUCT_ARG.pack_into(buf, pos, oparg)
         pos += _STRUCT_ARG.size
@@ -119,7 +121,7 @@ def _find_labels_and_gotos(code):
 
 def _inject_nop_sled(buf, pos, end):
     while pos < end:
-        pos = _write_instruction(buf, pos, dis.opmap['NOP'])
+        pos = _write_instruction(buf, pos, 'NOP')
 
 
 def _patch_code(code):
@@ -142,8 +144,8 @@ def _patch_code(code):
         failed = False
         try:
             for i in range(len(origin_stack) - target_depth):
-                pos = _write_instruction(buf, pos, dis.opmap['POP_BLOCK'])
-            pos = _write_instruction(buf, pos, dis.opmap['JUMP_ABSOLUTE'], target)
+                pos = _write_instruction(buf, pos, 'POP_BLOCK')
+            pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target)
         except (IndexError, struct.error):
             failed = True
 
