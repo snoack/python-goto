@@ -1,9 +1,10 @@
 # goto
 
+[![Build Status](https://travis-ci.org/snoack/python-goto.svg?branch=master)](https://travis-ci.org/snoack/python-goto)
+[![Pypi Entry](https://badge.fury.io/py/goto-statement.svg)](https://pypi.python.org/pypi/goto-statement)
+
 A function decorator to use `goto` in Python.
 Tested on Python 2.6 through 3.6 and PyPy.
-
-[![Build Status](https://travis-ci.org/snoack/python-goto.svg?branch=master)](https://travis-ci.org/snoack/python-goto)
 
 [![](https://imgs.xkcd.com/comics/goto.png)](https://xkcd.com/292/)
 
