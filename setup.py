@@ -6,7 +6,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md')) as file:
 
 setup(
     name='goto-statement',
-    version='1.1',
+    version='1.2',
     url='https://github.com/snoack/python-goto/',
     description='A function decorator, that rewrites the bytecode, to enable goto in Python',
     long_description=long_description,
