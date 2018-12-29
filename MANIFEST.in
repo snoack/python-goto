@@ -1,1 +1,1 @@
-include LICENSE tox.ini test_goto.py
+include README.md LICENSE tox.ini test_goto.py
