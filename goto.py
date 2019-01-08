@@ -169,7 +169,25 @@ def _patch_code(code):
         try:
             for i in range(len(origin_stack) - target_depth):
                 pos = _write_instruction(buf, pos, 'POP_BLOCK')
-            pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target // _BYTECODE.jump_unit)
+
+            if target >= end:
+                rel_target = (target - pos) // _BYTECODE.jump_unit
+                oparg_bits = 0
+
+                while True:
+                    rel_target -= (1 + _BYTECODE.argument.size) // _BYTECODE.jump_unit
+                    if rel_target >> oparg_bits == 0:
+                        pos = _write_instruction(buf, pos, 'EXTENDED_ARG', 0)
+                        break
+
+                    oparg_bits += _BYTECODE.argument_bits
+                    if rel_target >> oparg_bits == 0:
+                        break
+
+                pos = _write_instruction(buf, pos, 'JUMP_FORWARD', rel_target)
+            else:
+                pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target // _BYTECODE.jump_unit)
+
         except (IndexError, struct.error):
             failed = True
 

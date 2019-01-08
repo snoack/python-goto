@@ -43,10 +43,10 @@ def test_range_as_function():
 
 def test_EXTENDED_ARG():
     code = []
-    for i in range(2**16):
-        code.append('label .l{0}'.format(i))
     code.append('result = True')
     code.append('goto .foo')
+    for i in range(2**16):
+        code.append('label .l{0}'.format(i))
     code.append('result = "dead code"')
     code.append('label .foo')
     assert with_goto(make_function(code))() is True
@@ -75,8 +75,16 @@ if sys.version_info >= (3, 6):
     def test_jump_out_of_nested_2_loops():
         @with_goto
         def func():
+            x = 1
             for i in range(2):
                 for j in range(2):
+                    # These are more than 256 bytes of bytecode, requiring
+                    # a JUMP_FORWARD below on Python 3.6+, since the absolute
+                    # address would be too large, after leaving two blocks.
+                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
+                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
+                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
+
                     goto .end
             label .end
             return (i, j)
