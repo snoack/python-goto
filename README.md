@@ -46,107 +46,93 @@ syntax the function can be parsed, and results in following bytecode:
 
 
 ```
-  2           0 LOAD_FAST                0 (start)
-              3 STORE_FAST               2 (i)
+  5           0 LOAD_FAST                0 (start)
+              2 STORE_FAST               2 (i)
 
-  3           6 BUILD_LIST               0
-              9 STORE_FAST               3 (result)
+  6           4 BUILD_LIST               0
+              6 STORE_FAST               3 (result)
 
-  5          12 LOAD_GLOBAL              0 (label)
-             15 LOAD_ATTR                1 (begin)
-             18 POP_TOP
+  8           8 LOAD_GLOBAL              0 (label)
+             10 LOAD_ATTR                1 (begin)
+             12 POP_TOP
 
-  6          19 LOAD_FAST                2 (i)
-             22 LOAD_FAST                1 (stop)
-             25 COMPARE_OP               2 (==)
-             28 POP_JUMP_IF_FALSE       41
+  9          14 LOAD_FAST                2 (i)
+             16 LOAD_FAST                1 (stop)
+             18 COMPARE_OP               2 (==)
+             20 POP_JUMP_IF_FALSE       28
 
-  7          31 LOAD_GLOBAL              2 (goto)
-             34 LOAD_ATTR                3 (end)
-             37 POP_TOP
-             38 JUMP_FORWARD             0 (to 41)
+ 10          22 LOAD_GLOBAL              2 (goto)
+             24 LOAD_ATTR                3 (end)
+             26 POP_TOP
 
-  9     >>   41 LOAD_FAST                3 (result)
-             44 LOAD_ATTR                4 (append)
-             47 LOAD_FAST                2 (i)
-             50 CALL_FUNCTION            1
-             53 POP_TOP
+ 12     >>   28 LOAD_FAST                3 (result)
+             30 LOAD_METHOD              4 (append)
+             32 LOAD_FAST                2 (i)
+             34 CALL_METHOD              1
+             36 POP_TOP
 
- 10          54 LOAD_FAST                2 (i)
-             57 LOAD_CONST               1 (1)
-             60 INPLACE_ADD
-             61 STORE_FAST               2 (i)
+ 13          38 LOAD_FAST                2 (i)
+             40 LOAD_CONST               1 (1)
+             42 INPLACE_ADD
+             44 STORE_FAST               2 (i)
 
- 11          64 LOAD_GLOBAL              2 (goto)
-             67 LOAD_ATTR                1 (begin)
-             70 POP_TOP
+ 14          46 LOAD_GLOBAL              2 (goto)
+             48 LOAD_ATTR                1 (begin)
+             50 POP_TOP
 
- 13          71 LOAD_GLOBAL              0 (label)
-             74 LOAD_ATTR                3 (end)
-             77 POP_TOP
+ 16          52 LOAD_GLOBAL              0 (label)
+             54 LOAD_ATTR                3 (end)
+             56 POP_TOP
 
- 14          78 LOAD_FAST                3 (result)
-             81 RETURN_VALUE
+ 17          58 LOAD_FAST                3 (result)
+             60 RETURN_VALUE
 ```
 
 The `with_goto` decorator then removes the respective bytecode that has been
 generated for the attribute lookups of the `label` and `goto` variables, and
-injects a `JUMP_ABSOLUTE` instruction for each `goto`:
+injects a `JUMP_ABSOLUTE` or `JUMP_RELATIVE` instruction for each `goto`:
 
 ```
-  2           0 LOAD_FAST                0 (start)
-              3 STORE_FAST               2 (i)
+  5           0 LOAD_FAST                0 (start)
+              2 STORE_FAST               2 (i)
 
-  3           6 BUILD_LIST               0
-              9 STORE_FAST               3 (result)
+  6           4 BUILD_LIST               0
+              6 STORE_FAST               3 (result)
 
-  5          12 NOP
-             13 NOP
-             14 NOP
-             15 NOP
-             16 NOP
-             17 NOP
-             18 NOP
+  8           8 NOP
+             10 NOP
+             12 NOP
 
-  6     >>   19 LOAD_FAST                2 (i)
-             22 LOAD_FAST                1 (stop)
-             25 COMPARE_OP               2 (==)
-             28 POP_JUMP_IF_FALSE       41
+  9     >>   14 LOAD_FAST                2 (i)
+             16 LOAD_FAST                1 (stop)
+             18 COMPARE_OP               2 (==)
+             20 POP_JUMP_IF_FALSE       28
 
-  7          31 JUMP_ABSOLUTE           78
-             34 NOP
-             35 NOP
-             36 NOP
-             37 NOP
-             38 JUMP_FORWARD             0 (to 41)
+ 10          22 JUMP_FORWARD            34 (to 58)
+             24 NOP
+             26 NOP
 
-  9     >>   41 LOAD_FAST                3 (result)
-             44 LOAD_ATTR                4 (append)
-             47 LOAD_FAST                2 (i)
-             50 CALL_FUNCTION            1
-             53 POP_TOP
+ 12     >>   28 LOAD_FAST                3 (result)
+             30 LOAD_METHOD              4 (append)
+             32 LOAD_FAST                2 (i)
+             34 CALL_METHOD              1
+             36 POP_TOP
 
- 10          54 LOAD_FAST                2 (i)
-             57 LOAD_CONST               1 (1)
-             60 INPLACE_ADD
-             61 STORE_FAST               2 (i)
+ 13          38 LOAD_FAST                2 (i)
+             40 LOAD_CONST               1 (1)
+             42 INPLACE_ADD
+             44 STORE_FAST               2 (i)
 
- 11          64 JUMP_ABSOLUTE           19
-             67 NOP
-             68 NOP
-             69 NOP
-             70 NOP
+ 14          46 JUMP_ABSOLUTE           14
+             48 NOP
+             50 NOP
 
- 13          71 NOP
-             72 NOP
-             73 NOP
-             74 NOP
-             75 NOP
-             76 NOP
-             77 NOP
+ 16          52 NOP
+             54 NOP
+             56 NOP
 
- 14     >>   78 LOAD_FAST                3 (result)
-             81 RETURN_VALUE
+ 17     >>   58 LOAD_FAST                3 (result)
+             60 RETURN_VALUE
 ```
 
 ## Alternative implementation
