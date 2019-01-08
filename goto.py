@@ -5,6 +5,12 @@ import types
 import functools
 
 
+try:
+    _array_to_bytes = array.array.tobytes
+except AttributeError:
+    _array_to_bytes = array.array.tostring
+
+
 class _Bytecode:
     def __init__(self):
         code = (lambda: x if x else y).__code__.co_code
@@ -172,7 +178,7 @@ def _patch_code(code):
 
         _inject_nop_sled(buf, pos, end)
 
-    return _make_code(code, buf.tostring())
+    return _make_code(code, _array_to_bytes(buf))
 
 
 def with_goto(func_or_code):
