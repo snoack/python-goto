@@ -174,6 +174,15 @@ def test_jump_to_unknown_label():
     pytest.raises(SyntaxError, with_goto, func)
 
 
+def test_jump_to_ambiguous_label():
+    def func():
+        label .ambiguous
+        goto .ambiguous
+        label .ambiguous
+
+    pytest.raises(SyntaxError, with_goto, func)
+
+
 def test_function_is_copy():
     def func():
         pass

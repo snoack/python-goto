@@ -120,6 +120,9 @@ def _find_labels_and_gotos(code):
             if opname2 == 'LOAD_ATTR' and opname3 == 'POP_TOP':
                 name = code.co_names[oparg1]
                 if name == 'label':
+                    if oparg2 in labels:
+                        co_name = code.co_names[oparg2]
+                        raise SyntaxError('Ambiguous label {0!r}'.format(co_name))
                     labels[oparg2] = (offset1,
                                       offset4,
                                       tuple(block_stack))
