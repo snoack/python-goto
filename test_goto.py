@@ -71,62 +71,53 @@ def test_jump_into_loop():
 
     pytest.raises(SyntaxError, with_goto, func)
 
-if sys.version_info >= (3, 6):
-    def test_jump_out_of_nested_2_loops():
-        @with_goto
-        def func():
-            x = 1
-            for i in range(2):
-                for j in range(2):
-                    # These are more than 256 bytes of bytecode, requiring
-                    # a JUMP_FORWARD below on Python 3.6+, since the absolute
-                    # address would be too large, after leaving two blocks.
-                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
-                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
-                    x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
 
-                    goto .end
-            label .end
-            return (i, j)
+def test_jump_out_of_nested_2_loops():
+    @with_goto
+    def func():
+        x = 1
+        for i in range(2):
+            for j in range(2):
+                # These are more than 256 bytes of bytecode
+                x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
+                x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
+                x += x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x+x
 
-        assert func() == (0, 0)
+                goto .end
+        label .end
+        return (i, j)
 
-    def test_jump_out_of_nested_3_loops():
-        def func():
-            for i in range(2):
-                for j in range(2):
-                    for k in range(2):
-                        goto .end
-            label .end
-            return (i, j, k)
+    assert func() == (0, 0)
 
-        pytest.raises(SyntaxError, with_goto, func)
-else:
-    def test_jump_out_of_nested_4_loops():
-        @with_goto
-        def func():
-            for i in range(2):
-                for j in range(2):
-                    for k in range(2):
-                        for m in range(2):
-                            goto .end
-            label .end
-            return (i, j, k, m)
 
-        assert func() == (0, 0, 0, 0)
+def test_jump_out_of_nested_11_loops():
+    @with_goto
+    def func():
+        x = 1
+        for i1 in range(2):
+            for i2 in range(2):
+                for i3 in range(2):
+                    for i4 in range(2):
+                        for i5 in range(2):
+                            for i6 in range(2):
+                                for i7 in range(2):
+                                    for i8 in range(2):
+                                        for i9 in range(2):
+                                            for i10 in range(2):
+                                                for i11 in range(2):
+                                                    # These are more than
+                                                    # 256 bytes of bytecode
+                                                    x += x+x+x+x+x+x+x+x+x+x+x
+                                                    x += x+x+x+x+x+x+x+x+x+x+x
+                                                    x += x+x+x+x+x+x+x+x+x+x+x
+                                                    x += x+x+x+x+x+x+x+x+x+x+x
+                                                    x += x+x+x+x+x+x+x+x+x+x+x
 
-    def test_jump_out_of_nested_5_loops():
-        def func():
-            for i in range(2):
-                for j in range(2):
-                    for k in range(2):
-                        for m in range(2):
-                            for n in range(2):
-                                goto .end
-            label .end
-            return (i, j, k, m, n)
+                                                    goto .end
+        label .end
+        return (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11)
 
-        pytest.raises(SyntaxError, with_goto, func)
+    assert func() == (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 
 def test_jump_across_loops():
