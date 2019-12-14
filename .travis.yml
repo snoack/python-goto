@@ -10,8 +10,26 @@ python:
   - "pypy"
   - "pypy3"
 
+env:
+  global:
+    - DEPS=tox-travis
+    - LEGACY_DEPS="virtualenv<14 pluggy<0.6 tox<3 tox-travis<0.11"
+
+matrix:
+  include:
+    - python: 2.6
+      dist: trusty
+    - python: 3.2
+      dist: trusty
+      env:
+        - DEPS="$LEGACY_DEPS"
+    - python: 3.3
+      dist: trusty
+      env:
+        - DEPS="$LEGACY_DEPS"
+
 install:
-  - pip install tox-travis
+  - pip install $DEPS
 
 script:
   - tox
