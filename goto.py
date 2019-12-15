@@ -16,17 +16,17 @@ class _Bytecode:
         code = (lambda: x if x else y).__code__.co_code
         opcode, oparg = struct.unpack_from('BB', code, 2)
 
-        # Starting with Python 3.6, the bytecode format has been changed to use
+        # Starting with Python 3.6, the bytecode format has changed, using
         # 16-bit words (8-bit opcode + 8-bit argument) for each instruction,
-        # as opposed to previously 24-bit (8-bit opcode + 16-bit argument) for
-        # instructions that expect an argument or just 8-bit for those that don't.
+        # as opposed to previously 24 bit (8-bit opcode + 16-bit argument)
+        # for instructions that expect an argument and otherwise 8 bit.
         # https://bugs.python.org/issue26647
         if dis.opname[opcode] == 'POP_JUMP_IF_FALSE':
             self.argument = struct.Struct('B')
             self.have_argument = 0
-            # As of Python 3.6, jump targets are still addressed by their byte
-            # unit. This, however, is matter to change, so that jump targets,
-            # in the future, will refer to the code unit (address in bytes / 2).
+            # As of Python 3.6, jump targets are still addressed by their
+            # byte unit. This is matter to change, so that jump targets,
+            # in the future might refer to code units (address in bytes / 2).
             # https://bugs.python.org/issue26647
             self.jump_unit = 8 // oparg
         else:
@@ -155,8 +155,9 @@ def _find_labels_and_gotos(code):
                 name = code.co_names[oparg1]
                 if name == 'label':
                     if oparg2 in labels:
-                        co_name = code.co_names[oparg2]
-                        raise SyntaxError('Ambiguous label {0!r}'.format(co_name))
+                        raise SyntaxError('Ambiguous label {0!r}'.format(
+                            code.co_names[oparg2]
+                        ))
                     labels[oparg2] = (offset1,
                                       offset4,
                                       tuple(block_stack))
@@ -196,7 +197,9 @@ def _patch_code(code):
         try:
             _, target, target_stack = labels[label]
         except KeyError:
-            raise SyntaxError('Unknown label {0!r}'.format(code.co_names[label]))
+            raise SyntaxError('Unknown label {0!r}'.format(
+                code.co_names[label]
+            ))
 
         target_depth = len(target_stack)
         if origin_stack[:target_depth] != target_stack:

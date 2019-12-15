@@ -8,7 +8,8 @@ setup(
     name='goto-statement',
     version='1.2',
     url='https://github.com/snoack/python-goto/',
-    description='A function decorator, that rewrites the bytecode, to enable goto in Python',
+    description='A function decorator that rewrites the bytecode, '
+                'enabling goto in Python',
     long_description=long_description,
     long_description_content_type='text/markdown',
     py_modules=['goto'],
