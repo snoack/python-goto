@@ -4,7 +4,7 @@
 [![Pypi Entry](https://badge.fury.io/py/goto-statement.svg)](https://pypi.python.org/pypi/goto-statement)
 
 A function decorator to use `goto` in Python.
-Tested on Python 2.6 through 3.7 and PyPy.
+Tested on Python 2.6 through 3.8 and PyPy.
 
 [![](https://imgs.xkcd.com/comics/goto.png)](https://xkcd.com/292/)
 

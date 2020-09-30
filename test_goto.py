@@ -62,6 +62,18 @@ def test_jump_out_of_loop():
     assert func() == 0
 
 
+def test_jump_out_of_loop_and_survive():
+    @with_goto
+    def func():
+        for i in range(10):
+            for j in range(10):
+                goto .end
+            label .end
+        return (i, j)
+
+    assert func() == (9, 0)
+
+
 def test_jump_into_loop():
     def func():
         for i in range(10):
