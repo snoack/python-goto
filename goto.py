@@ -55,7 +55,7 @@ def _make_code(code, codestring):
         args.insert(1, code.co_kwonlyargcount)  # PY3
     except AttributeError:
         pass
-    
+
     try:
         args.insert(1, code.co_posonlyargcount)  # PY3
     except AttributeError:
