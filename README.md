@@ -1,5 +1,14 @@
 # goto
 
+> [!WARNING]
+> **This project is discontinued and no longer supported.**
+>
+> It works by rewriting CPython bytecode and was designed for Python 2.6
+> through 3.7. Python's bytecode and code object APIs have changed
+> substantially since then, and the package is not compatible with current
+> Python releases. This repository is preserved for historical reference; no
+> compatibility updates, fixes, or releases are planned.
+
 [![Build Status](https://travis-ci.org/snoack/python-goto.svg?branch=master)](https://travis-ci.org/snoack/python-goto)
 [![Pypi Entry](https://badge.fury.io/py/goto-statement.svg)](https://pypi.python.org/pypi/goto-statement)
 
