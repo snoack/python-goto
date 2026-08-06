@@ -43,20 +43,23 @@ _BYTECODE = _Bytecode()
 
 
 def _make_code(code, codestring):
-    args = [
-        code.co_argcount,  code.co_nlocals,     code.co_stacksize,
-        code.co_flags,     codestring,          code.co_consts,
-        code.co_names,     code.co_varnames,    code.co_filename,
-        code.co_name,      code.co_firstlineno, code.co_lnotab,
-        code.co_freevars,  code.co_cellvars
-    ]
-
     try:
-        args.insert(1, code.co_kwonlyargcount)  # PY3
-    except AttributeError:
-        pass
+        return code.replace(co_code=codestring) # new in 3.8+
+    except:
+        args = [
+            code.co_argcount,  code.co_nlocals,     code.co_stacksize,
+            code.co_flags,     codestring,          code.co_consts,
+            code.co_names,     code.co_varnames,    code.co_filename,
+            code.co_name,      code.co_firstlineno, code.co_lnotab,
+            code.co_freevars,  code.co_cellvars
+        ]
 
-    return types.CodeType(*args)
+        try:
+            args.insert(1, code.co_kwonlyargcount)  # PY3
+        except AttributeError:
+            pass
+
+        return types.CodeType(*args)
 
 
 def _parse_instructions(code):
