@@ -62,6 +62,18 @@ def test_jump_out_of_loop():
     assert func() == 0
 
 
+def test_jump_out_of_loop_and_survive():
+    @with_goto
+    def func():
+        for i in range(10):
+            for j in range(10):
+                goto .end
+            label .end
+        return (i, j)
+
+    assert func() == (9, 0)
+
+
 def test_jump_into_loop():
     def func():
         for i in range(10):
@@ -118,7 +130,6 @@ def test_jump_out_of_nested_11_loops():
 
     assert func() == (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
-
 def test_jump_across_loops():
     def func():
         for i in range(10):
@@ -144,7 +155,6 @@ def test_jump_out_of_try_block():
         return rv
 
     assert func() is None
-
 
 def test_jump_into_try_block():
     def func():

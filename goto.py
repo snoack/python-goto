@@ -34,6 +34,8 @@ class _Bytecode:
             self.have_argument = dis.HAVE_ARGUMENT
             self.jump_unit = 1
 
+        self.has_loop_blocks = 'SETUP_LOOP' in dis.opmap
+
     @property
     def argument_bits(self):
         return self.argument.size * 8
@@ -43,20 +45,23 @@ _BYTECODE = _Bytecode()
 
 
 def _make_code(code, codestring):
-    args = [
-        code.co_argcount,  code.co_nlocals,     code.co_stacksize,
-        code.co_flags,     codestring,          code.co_consts,
-        code.co_names,     code.co_varnames,    code.co_filename,
-        code.co_name,      code.co_firstlineno, code.co_lnotab,
-        code.co_freevars,  code.co_cellvars
-    ]
-
     try:
-        args.insert(1, code.co_kwonlyargcount)  # PY3
-    except AttributeError:
-        pass
+        return code.replace(co_code=codestring) # new in 3.8+
+    except:
+        args = [
+            code.co_argcount,  code.co_nlocals,     code.co_stacksize,
+            code.co_flags,     codestring,          code.co_consts,
+            code.co_names,     code.co_varnames,    code.co_filename,
+            code.co_name,      code.co_firstlineno, code.co_lnotab,
+            code.co_freevars,  code.co_cellvars
+        ]
 
-    return types.CodeType(*args)
+        try:
+            args.insert(1, code.co_kwonlyargcount)  # PY3
+        except AttributeError:
+            pass
+
+        return types.CodeType(*args)
 
 
 def _parse_instructions(code):
@@ -86,6 +91,28 @@ def _parse_instructions(code):
         extended_arg_offset = None
         yield (dis.opname[opcode], oparg, offset)
 
+def _get_instruction_size(opname, oparg=0):
+    size = 1
+
+    extended_arg = oparg >> _BYTECODE.argument_bits
+    if extended_arg != 0:
+        size += _get_instruction_size('EXTENDED_ARG', extended_arg)
+        oparg &= (1 << _BYTECODE.argument_bits) - 1
+
+    opcode = dis.opmap[opname]
+    if opcode >= _BYTECODE.have_argument:
+        size += _BYTECODE.argument.size
+
+    return size
+
+def _get_instructions_size(ops):
+    size = 0
+    for op in ops:
+        if isinstance(op, str):
+            size += _get_instruction_size(op)
+        else:
+            size += _get_instruction_size(*op)
+    return size
 
 def _get_instruction_size(opname, oparg=0):
     size = 1
@@ -128,6 +155,13 @@ def _write_instruction(buf, pos, opname, oparg=0):
 
     return pos
 
+def _write_instructions(buf, pos, ops):
+    for op in ops:
+        if isinstance(op, str):
+            pos = _write_instruction(buf, pos, op)
+        else:
+            pos = _write_instruction(buf, pos, *op)
+    return pos
 
 def _write_instructions(buf, pos, ops):
     for op in ops:
@@ -144,6 +178,7 @@ def _find_labels_and_gotos(code):
 
     block_stack = []
     block_counter = 0
+    block_exits = []
 
     opname1 = oparg1 = offset1 = None
     opname2 = oparg2 = offset2 = None
@@ -170,9 +205,16 @@ def _find_labels_and_gotos(code):
                          'SETUP_EXCEPT', 'SETUP_FINALLY',
                          'SETUP_WITH', 'SETUP_ASYNC_WITH'):
             block_counter += 1
-            block_stack.append(block_counter)
+            block_stack.append((opname1, block_counter))
+        elif not _BYTECODE.has_loop_blocks and opname1 == 'FOR_ITER':
+            block_counter += 1
+            block_stack.append((opname1, block_counter))
+            block_exits.append(offset1 + oparg1)
         elif opname1 == 'POP_BLOCK' and block_stack:
             block_stack.pop()
+        elif block_exits and offset1 == block_exits[-1] and block_stack:
+            block_stack.pop()
+            block_exits.pop()
 
         opname1, oparg1, offset1 = opname2, oparg2, offset2
         opname2, oparg2, offset2 = opname3, oparg3, offset3
@@ -206,8 +248,13 @@ def _patch_code(code):
             raise SyntaxError('Jump into different block')
 
         ops = []
-        for i in range(len(origin_stack) - target_depth):
-            ops.append('POP_BLOCK')
+
+        for block, _ in origin_stack[target_depth:]:
+            if block == 'FOR_ITER':
+                ops.append('POP_TOP')
+            else:
+                ops.append('POP_BLOCK')
+
         ops.append(('JUMP_ABSOLUTE', target // _BYTECODE.jump_unit))
 
         if pos + _get_instructions_size(ops) > end:
