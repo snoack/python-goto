@@ -5,28 +5,22 @@ import types
 import functools
 
 
-try:
-    _array_to_bytes = array.array.tobytes
-except AttributeError:
-    _array_to_bytes = array.array.tostring
-
-
 class _Bytecode:
     def __init__(self):
         code = (lambda: x if x else y).__code__.co_code
         opcode, oparg = struct.unpack_from('BB', code, 2)
 
-        # Starting with Python 3.6, the bytecode format has changed, using
+        # Starting with Python 3.6, the bytecode format has been changed to use
         # 16-bit words (8-bit opcode + 8-bit argument) for each instruction,
-        # as opposed to previously 24 bit (8-bit opcode + 16-bit argument)
-        # for instructions that expect an argument and otherwise 8 bit.
+        # as opposed to previously 24-bit (8-bit opcode + 16-bit argument) for
+        # instructions that expect an argument or just 8-bit for those that don't.
         # https://bugs.python.org/issue26647
         if dis.opname[opcode] == 'POP_JUMP_IF_FALSE':
             self.argument = struct.Struct('B')
             self.have_argument = 0
-            # As of Python 3.6, jump targets are still addressed by their
-            # byte unit. This is matter to change, so that jump targets,
-            # in the future might refer to code units (address in bytes / 2).
+            # As of Python 3.6, jump targets are still addressed by their byte
+            # unit. This, however, is matter to change, so that jump targets,
+            # in the future, will refer to the code unit (address in bytes / 2).
             # https://bugs.python.org/issue26647
             self.jump_unit = 8 // oparg
         else:
@@ -43,18 +37,45 @@ _BYTECODE = _Bytecode()
 
 
 def _make_code(code, codestring):
-    args = [
-        code.co_argcount,  code.co_nlocals,     code.co_stacksize,
-        code.co_flags,     codestring,          code.co_consts,
-        code.co_names,     code.co_varnames,    code.co_filename,
-        code.co_name,      code.co_firstlineno, code.co_lnotab,
-        code.co_freevars,  code.co_cellvars
-    ]
-
-    try:
-        args.insert(1, code.co_kwonlyargcount)  # PY3
-    except AttributeError:
-        pass
+    # Build CodeType constructor args compatible with multiple Python versions.
+    # Python 3.8+ added co_posonlyargcount before co_kwonlyargcount.
+    if hasattr(code, 'co_posonlyargcount'):
+        args = [
+            code.co_argcount,
+            code.co_posonlyargcount,
+            code.co_kwonlyargcount,
+            code.co_nlocals,
+            code.co_stacksize,
+            code.co_flags,
+            codestring,
+            code.co_consts,
+            code.co_names,
+            code.co_varnames,
+            code.co_filename,
+            code.co_name,
+            code.co_firstlineno,
+            code.co_lnotab,
+            code.co_freevars,
+            code.co_cellvars,
+        ]
+    else:
+        args = [
+            code.co_argcount,
+            code.co_kwonlyargcount,
+            code.co_nlocals,
+            code.co_stacksize,
+            code.co_flags,
+            codestring,
+            code.co_consts,
+            code.co_names,
+            code.co_varnames,
+            code.co_filename,
+            code.co_name,
+            code.co_firstlineno,
+            code.co_lnotab,
+            code.co_freevars,
+            code.co_cellvars,
+        ]
 
     return types.CodeType(*args)
 
@@ -87,31 +108,6 @@ def _parse_instructions(code):
         yield (dis.opname[opcode], oparg, offset)
 
 
-def _get_instruction_size(opname, oparg=0):
-    size = 1
-
-    extended_arg = oparg >> _BYTECODE.argument_bits
-    if extended_arg != 0:
-        size += _get_instruction_size('EXTENDED_ARG', extended_arg)
-        oparg &= (1 << _BYTECODE.argument_bits) - 1
-
-    opcode = dis.opmap[opname]
-    if opcode >= _BYTECODE.have_argument:
-        size += _BYTECODE.argument.size
-
-    return size
-
-
-def _get_instructions_size(ops):
-    size = 0
-    for op in ops:
-        if isinstance(op, str):
-            size += _get_instruction_size(op)
-        else:
-            size += _get_instruction_size(*op)
-    return size
-
-
 def _write_instruction(buf, pos, opname, oparg=0):
     extended_arg = oparg >> _BYTECODE.argument_bits
     if extended_arg != 0:
@@ -126,15 +122,6 @@ def _write_instruction(buf, pos, opname, oparg=0):
         _BYTECODE.argument.pack_into(buf, pos, oparg)
         pos += _BYTECODE.argument.size
 
-    return pos
-
-
-def _write_instructions(buf, pos, ops):
-    for op in ops:
-        if isinstance(op, str):
-            pos = _write_instruction(buf, pos, op)
-        else:
-            pos = _write_instruction(buf, pos, *op)
     return pos
 
 
@@ -154,10 +141,6 @@ def _find_labels_and_gotos(code):
             if opname2 == 'LOAD_ATTR' and opname3 == 'POP_TOP':
                 name = code.co_names[oparg1]
                 if name == 'label':
-                    if oparg2 in labels:
-                        raise SyntaxError('Ambiguous label {0!r}'.format(
-                            code.co_names[oparg2]
-                        ))
                     labels[oparg2] = (offset1,
                                       offset4,
                                       tuple(block_stack))
@@ -197,39 +180,26 @@ def _patch_code(code):
         try:
             _, target, target_stack = labels[label]
         except KeyError:
-            raise SyntaxError('Unknown label {0!r}'.format(
-                code.co_names[label]
-            ))
+            raise SyntaxError('Unknown label {0!r}'.format(code.co_names[label]))
 
         target_depth = len(target_stack)
         if origin_stack[:target_depth] != target_stack:
             raise SyntaxError('Jump into different block')
 
-        ops = []
-        for i in range(len(origin_stack) - target_depth):
-            ops.append('POP_BLOCK')
-        ops.append(('JUMP_ABSOLUTE', target // _BYTECODE.jump_unit))
+        failed = False
+        try:
+            for i in range(len(origin_stack) - target_depth):
+                pos = _write_instruction(buf, pos, 'POP_BLOCK')
+            pos = _write_instruction(buf, pos, 'JUMP_ABSOLUTE', target // _BYTECODE.jump_unit)
+        except (IndexError, struct.error):
+            failed = True
 
-        if pos + _get_instructions_size(ops) > end:
-            # not enough space, add code at buffer end and jump there
-            buf_end = len(buf)
+        if failed or pos > end:
+            raise SyntaxError('Jump out of too many nested blocks')
 
-            go_to_end_ops = [('JUMP_ABSOLUTE', buf_end // _BYTECODE.jump_unit)]
+        _inject_nop_sled(buf, pos, end)
 
-            if pos + _get_instructions_size(go_to_end_ops) > end:
-                # not sure if reachable
-                raise SyntaxError('Goto in an incredibly huge function')
-
-            pos = _write_instructions(buf, pos, go_to_end_ops)
-            _inject_nop_sled(buf, pos, end)
-
-            buf.extend([0] * _get_instructions_size(ops))
-            _write_instructions(buf, buf_end, ops)
-        else:
-            pos = _write_instructions(buf, pos, ops)
-            _inject_nop_sled(buf, pos, end)
-
-    return _make_code(code, _array_to_bytes(buf))
+    return _make_code(code, buf.tobytes())
 
 
 def with_goto(func_or_code):
